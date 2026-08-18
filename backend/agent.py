@@ -9,14 +9,36 @@ from langchain_core.messages import (
     HumanMessage
  
 )
+from psycopg import AsyncConnection
+import psycopg
 import asyncio
-
+from psycopg.rows import dict_row
+#  CORRECT
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from backend.config import config
 from backend.tools import create_tools
 from backend.state import State
 from mcp_servers.servers import get_mcp_server_config
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+import uuid
+
+
+def get_database_url():
+    database_url = config.DATABASE_URL
+
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL is missing. Please add your Render PostgreSQL External Database URL to .env"
+        )
+
+    if "sslmode=" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
+
+    return database_url
+
+
 
 
 SYSTEM_PROMPT = """You are an advanced AI travel planning assistant.
@@ -108,14 +130,41 @@ async def build_trip_agent() :
     workflow.add_conditional_edges("agent", tools_condition)
     workflow.add_edge("tools", "agent")
     workflow.add_edge("agent", END)
+    # =========================
+    # PostgreSQL Checkpointer
+    # =========================
+    DATABASE_URL = get_database_url()
 
-    app = workflow.compile()
+    
+
+    conn = await AsyncConnection.connect(
+        DATABASE_URL,
+        autocommit=True,
+        row_factory=dict_row
+    )
+    checkpointer = AsyncPostgresSaver(conn)
+    await checkpointer.setup()
+
+    app = workflow.compile(checkpointer=checkpointer)
     return app
 
 
 #  test
 # Exemple avec conservation d'historique simple :
-async def test_agent():
+
+def genre_thread_id():
+    thread_id = f"user_{uuid.uuid4().hex}"
+    return thread_id
+async def test_agent(user_input=None,thread_id=None):
+   
+    if thread_id is None:
+        thread_id = genre_thread_id()
+
+    config_user = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }  
     agent = await build_trip_agent()
     history = []  # Maintain clean message list
 
@@ -128,7 +177,7 @@ async def test_agent():
         history.append(HumanMessage(content=user_input))
 
         # Invoke agent with state
-        response = await agent.ainvoke({"messages": history})
+        response = await agent.ainvoke({"messages": history},config=config_user)
 
         # Update history with the returned full message list from state
         history = response["messages"]

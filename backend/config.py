@@ -12,6 +12,7 @@ class Config:
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
     WEATHER_API_KEY: str = os.getenv("WEATHER_API_KEY", "")
     GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
 
     @classmethod
     def validate(cls) -> None:
@@ -28,13 +29,6 @@ class Config:
 
 
 config = Config()
-def cofig():
-    print(f"\n TAVILY_API_KEY :{config.TAVILY_API_KEY}")
-    print(f"\nGROQ_API_KEY :{config.GROQ_API_KEY}")
-    print(f"\n WEATHER_API_KEY :{config.WEATHER_API_KEY}")
 
-
-if __name__== "__main__":
-    cofig()
 
   
