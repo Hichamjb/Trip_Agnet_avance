@@ -2683,4 +2683,17 @@ class EnterpriseLongTermMemory:
         
         return await asyncio.to_thread(self.build_context, *args, **kwargs)
 
-        
+
+
+
+
+
+
+memory = EnterpriseLongTermMemory(
+    persist_directory="./memory_db",
+    embedding_model="all-MiniLM-L6-v2",   
+    vector_backend="memory",              
+    enable_reranker=False,               
+    enable_graph=True,
+    enable_cache=True,
+)
