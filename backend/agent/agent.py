@@ -15,9 +15,9 @@ import asyncio
 from psycopg.rows import dict_row
 #  CORRECT
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from backend.config import config
-from backend.tools import create_tools
-from backend.state import State
+from backend.config.config import config
+from backend.tools.tools import create_tools
+from backend.agent.state import State
 from mcp_servers.servers import get_mcp_server_config
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI

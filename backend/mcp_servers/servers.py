@@ -1,7 +1,7 @@
 # mcp/servers.py
 
 import os
-from backend.config import config
+from backend.config.config import config
 
 
 def get_mcp_server_config() -> dict:
