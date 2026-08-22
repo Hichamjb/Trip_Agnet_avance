@@ -1,9 +1,9 @@
 from typing import Any
-
+from typing import Any, Callable, Optional, Dict, List
 from dotenv import load_dotenv
 import os
 import certifi
-
+from backend.memory.lang_memory import MemoryType
 from fastmcp import FastMCP, Context
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.dependencies import get_http_headers
@@ -34,11 +34,6 @@ mcp = FastMCP("Memory-RAG-Server")
 # ============================================================
 
 class UserContextMiddleware(Middleware):
-    """
-    Extract user/session information from the MCP request
-    and make it available through FastMCP Context.
-    """
-
     async def on_request(
         self,
         context: MiddlewareContext,
@@ -46,25 +41,11 @@ class UserContextMiddleware(Middleware):
     ):
         headers = get_http_headers()
 
-        user_id = headers.get("x-user-id")
-        thread_id = headers.get("x-thread-id")
+        user_id = headers.get("x-user-id", "test_user")
+        thread_id = headers.get("x-thread-id", "test_thread")
 
-        if not user_id:
-            raise ValueError("Missing x-user-id header")
-
-        if not thread_id:
-            raise ValueError("Missing x-thread-id header")
-
-        # Store information in FastMCP request context
-        context.fastmcp_context.set_state(
-            "user_id",
-            user_id,
-        )
-
-        context.fastmcp_context.set_state(
-            "thread_id",
-            thread_id,
-        )
+        await context.fastmcp_context.set_state("user_id", user_id)
+        await context.fastmcp_context.set_state("thread_id", thread_id)
 
         return await call_next(context)
 
@@ -112,6 +93,7 @@ def search_rag(
 def memory_search(
     query: str,
     top_k: int = 5,
+    memory_types: Optional[list[str]] = None,
     ctx: Context | None = None,
 ) -> list[dict]:
     """
@@ -125,12 +107,14 @@ def memory_search(
 
     user_id = ctx.get_state("user_id")
 
-    if not user_id:
-        raise RuntimeError("user_id is missing from context")
+    if user_id is None or not isinstance(user_id, str) or not user_id.strip():
+        # raise RuntimeError("user is none or not str")
+        user_id = "user_123"
 
     results = memory.search_memories(
         query=query,
         user_id=user_id,
+        memory_types=memory_types,
         top_k=top_k,
     )
 
@@ -158,9 +142,28 @@ def memory_save(
     ctx: Context | None = None,
 ) -> dict:
     """
-    Save information into long-term memory.
+    Save durable user-specific information into long-term memory.
 
-    user_id is obtained automatically from the MCP context.
+    Use this tool only for information that is useful beyond
+    the current conversation.
+
+    Examples:
+    - user preferences
+    - user profile information
+    - long-term goals
+    - travel preferences
+    - plans
+    - decisions
+    - previous experiences
+
+    Do NOT save temporary information such as:
+    - current weather
+    - temporary hotel prices
+    - temporary flight prices
+    - temporary availability
+    - temporary search results
+
+    The user_id is obtained automatically from the MCP request context.
     """
 
     if ctx is None:
@@ -168,8 +171,9 @@ def memory_save(
 
     user_id = ctx.get_state("user_id")
 
-    if not user_id:
-        raise RuntimeError("user_id is missing from context")
+    if user_id is None or not isinstance(user_id, str) or not user_id.strip():
+        # raise RuntimeError("user is none or not str")
+        user_id = "user_123"
 
     result = memory.add_memory(
         content=content,
@@ -210,8 +214,9 @@ def memory_context(
 
     user_id = ctx.get_state("user_id")
 
-    if not user_id:
-        raise RuntimeError("user_id is missing from context")
+    if user_id is None or not isinstance(user_id, str) or not user_id.strip():
+        # raise RuntimeError("user is none or not str")
+        user_id = "user_123"
 
     return memory.build_context(
         query=query,
@@ -225,82 +230,125 @@ def memory_context(
 # TOOL 5 — MEMORY UPDATE
 # ============================================================
 
-@mcp.tool
-def memory_update(
-    memory_id: str,
-    content: str,
-    ctx: Context | None = None,
-) -> dict:
-    """
-    Update an existing long-term memory.
-    """
+# @mcp.tool
+# def memory_update(
+#     memory_id: str,
+#     content: str,
+#     ctx: Context | None = None,
+# ) -> dict:
+#     """
+#     Update an existing long-term memory.
+#     """
 
-    if ctx is None:
-        raise RuntimeError("MCP Context is required")
+#     if ctx is None:
+#         raise RuntimeError("MCP Context is required")
 
-    user_id = ctx.get_state("user_id")
+#     user_id = ctx.get_state("user_id")
 
-    if not user_id:
-        raise RuntimeError("user_id is missing from context")
+#     if not user_id:
+#         raise RuntimeError("user_id is missing from context")
 
-    # IMPORTANT:
-    # Ideally your memory layer should verify that
-    # memory_id belongs to this user_id before updating.
+#     # IMPORTANT:
+#     # Ideally your memory layer should verify that
+#     # memory_id belongs to this user_id before updating.
 
-    result = memory.update_memory(
-        memory_id=memory_id,
-        content=content,
-    )
+#     result = memory.update_memory(
+#         memory_id=memory_id,
+#         content=content,
+#     )
 
-    return {
-        "success": True,
-        "memory_id": result.id,
-        "content": result.content,
-        "memory_type": result.memory_type,
-        "version": result.version,
-    }
+#     return {
+#         "success": True,
+#         "memory_id": result.id,
+#         "content": result.content,
+#         "memory_type": result.memory_type,
+#         "version": result.version,
+#     }
 
 
 # ============================================================
 # TOOL 6 — MEMORY DELETE
 # ============================================================
 
+# @mcp.tool
+# def memory_delete(
+#     memory_id: str,
+#     ctx: Context | None = None,
+# ) -> dict:
+#     """
+#     Soft-delete a long-term memory.
+#     """
+
+#     if ctx is None:
+#         raise RuntimeError("MCP Context is required")
+
+#     user_id = ctx.get_state("user_id")
+
+#     if user_id is None or not isinstance(user_id, str) or not user_id.strip():
+#         # raise RuntimeError("user is none or not str")
+#         user_id = "user_123"
+
+#     # IMPORTANT:
+#     # Ideally your memory layer should verify that
+#     # memory_id belongs to this user_id before deleting.
+
+#     memory.soft_delete_memory(memory_id)
+
+#     return {
+#         "success": True,
+#         "memory_id": memory_id,
+#         "status": "deleted",
+#     }
+
+
+# ============================================================
+# TOOL 7 — GET MEMORY DESCRIPTIONS 
+# ============================================================
+
+
 @mcp.tool
-def memory_delete(
-    memory_id: str,
-    ctx: Context | None = None,
-) -> dict:
+def memory_get_types() -> List[Dict[str, str]]:
     """
-    Soft-delete a long-term memory.
+    Return all available long-term memory types and their descriptions.
+
+    Use this tool when you need to understand which memory type
+    should be used when saving user information.
     """
+    return MemoryType.get_llm_descriptions()
 
-    if ctx is None:
-        raise RuntimeError("MCP Context is required")
+@mcp.tool
+def memory_get_values() -> List[str]:
+    """
+    Return all available memory type values, including AUTO.
+    """
+    return MemoryType.all_values()
 
-    user_id = ctx.get_state("user_id")
+@mcp.tool
+def memory_get_type_description(memory_type: str) -> str:
+    """
+    Return the description of a specific memory type.
 
-    if not user_id:
-        raise RuntimeError("user_id is missing from context")
+    Args:
+        memory_type: Memory type value.
+    """
+    return MemoryType.get_description(memory_type)
 
-    # IMPORTANT:
-    # Ideally your memory layer should verify that
-    # memory_id belongs to this user_id before deleting.
+@mcp.tool
+def memory_get_schema() -> Dict[str, Any]:
+    """
+    Return the JSON schema used to select a memory type.
 
-    memory.soft_delete_memory(memory_id)
-
-    return {
-        "success": True,
-        "memory_id": memory_id,
-        "status": "deleted",
-    }
-
+    This schema can be used by the LLM when deciding
+    which memory type should be used.
+    """
+    return MemoryType.get_llm_schema()
 
 # ============================================================
 # SERVER ENTRYPOINT
 # ============================================================
 if __name__ == "__main__":
     mcp.run(
-        transport="http",
+        transport="sse",
         host="127.0.0.1",
-        port=8000,
-    )
+        port=8001
+    )    

@@ -138,23 +138,131 @@ _STOPWORDS = {
 # Enum
 # ---------------------------------------------------------------------------
 
-class MemoryType(str, Enum):
-    SEMANTIC = "semantic"
-    EPISODIC = "episodic"
-    PROFILE = "profile"
-    PROCEDURAL = "procedural"
-    ENTITY = "entity"
-    RELATIONSHIP = "relationship"
+from enum import Enum
+from typing import List, Dict, Any
+
+
+class MemoryCategory(str, Enum):
+    """High-level categories for grouping memories."""
+    KNOWLEDGE = "knowledge"
+    EXPERIENCE = "experience"
     PREFERENCE = "preference"
-    FACT = "fact"
-    EVENT = "event"
-    WORKING = "working"
+    PROFILE = "profile"
+    PROCEDURE = "procedure"
+    RELATIONSHIP = "relationship"
     TASK = "task"
-    GOAL = "goal"
+    WORKING = "working"
     CONVERSATION = "conversation"
-    SUMMARY = "summary"
+    REFLECTION = "reflection"
+    SYSTEM = "system"
 
 
+class MemoryType(str, Enum):
+    """
+    Professional long-term memory types.
+
+    Each type has:
+    - value: string value (storage-compatible)
+    - description: precise description
+    - category: general category
+    - retention: persistence level (1.0 = permanent, 0.0 = temporary)
+    - volatility: how likely it changes over time (1.0 = highly volatile, 0.0 = stable)
+    """
+
+    # Knowledge & facts
+    SEMANTIC = ("semantic", "General knowledge and stable facts", MemoryCategory.KNOWLEDGE, 1.0, 0.0)
+    FACT = ("fact", "A verified, checkable fact", MemoryCategory.KNOWLEDGE, 1.0, 0.0)
+
+    # Experiences & events
+    EPISODIC = ("episodic", "A personal experience tied to time and place", MemoryCategory.EXPERIENCE, 0.8, 0.5)
+    EVENT = ("event", "An event that occurred at a specific time", MemoryCategory.EXPERIENCE, 0.7, 0.6)
+
+    # Preferences & profile
+    PREFERENCE = ("preference", "A preference, taste, or desire", MemoryCategory.PREFERENCE, 0.9, 0.4)
+    PROFILE = ("profile", "Stable personal information (name, job, background)", MemoryCategory.PROFILE, 1.0, 0.1)
+
+    # Procedures & skills
+    PROCEDURAL = ("procedural", "Steps, procedures, and know-how", MemoryCategory.PROCEDURE, 0.95, 0.2)
+    SKILL = ("skill", "An acquired skill or ability", MemoryCategory.PROCEDURE, 0.9, 0.3)
+    RULE = ("rule", "A rule, policy, or constraint", MemoryCategory.SYSTEM, 1.0, 0.1)
+
+    # Entities & relationships
+    ENTITY = ("entity", "An independent entity (person, company, tool)", MemoryCategory.RELATIONSHIP, 0.9, 0.2)
+    RELATIONSHIP = ("relationship", "A relation between entities (works_on, uses, knows)", MemoryCategory.RELATIONSHIP, 0.8, 0.5)
+
+    # Tasks & goals
+    TASK = ("task", "A task that needs to be done", MemoryCategory.TASK, 0.7, 0.7)
+    GOAL = ("goal", "A long-term goal", MemoryCategory.TASK, 0.8, 0.4)
+    PLAN = ("plan", "A plan or strategy", MemoryCategory.TASK, 0.6, 0.7)
+    DECISION = ("decision", "A decision with its reasoning", MemoryCategory.TASK, 0.8, 0.5)
+
+    # Working memory
+    WORKING = ("working", "Temporary information currently in use", MemoryCategory.WORKING, 0.2, 1.0)
+
+    # Conversations & summaries
+    CONVERSATION = ("conversation", "A summary or excerpt of a conversation", MemoryCategory.CONVERSATION, 0.5, 0.6)
+    SUMMARY = ("summary", "A summary of information or a document", MemoryCategory.CONVERSATION, 0.7, 0.4)
+
+    # Reflections & intuitions
+    REFLECTION = ("reflection", "A personal insight or thought", MemoryCategory.REFLECTION, 0.6, 0.6)
+    INTUITION = ("intuition", "A hunch or unverified feeling", MemoryCategory.REFLECTION, 0.4, 0.8)
+
+    # Automatic classification
+    AUTO = ("auto", "Type is determined automatically from content", MemoryCategory.SYSTEM, 0.0, 0.0)
+
+    def __new__(cls, value: str, description: str, category: MemoryCategory,
+                retention: float, volatility: float):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.description = description
+        obj.category = category
+        obj.retention = retention          # 0..1
+        obj.volatility = volatility        # 0..1
+        return obj
+
+    @classmethod
+    def all_types(cls) -> List["MemoryType"]:
+        """Return all types except AUTO."""
+        return [mt for mt in cls if mt != cls.AUTO]
+
+    @classmethod
+    def all_values(cls) -> List[str]:
+        """Return string values of all types, including AUTO."""
+        return [mt.value for mt in cls]
+
+    @classmethod
+    def get_description(cls, value: str) -> str:
+        """Return description for a given type value."""
+        for mt in cls:
+            if mt.value == value:
+                return mt.description
+        return "Unknown memory type"
+
+    @classmethod
+    def get_llm_schema(cls) -> Dict[str, Any]:
+        """
+        Return a JSON Schema for defining an LLM tool parameter
+        that selects a memory type.
+        """
+        return {
+            "type": "string",
+            "enum": cls.all_values(),
+            "description": "Choose the appropriate memory type for the content to be saved.",
+        }
+
+    @classmethod
+    def get_llm_descriptions(cls) -> List[Dict[str, str]]:
+        """
+        Return a list of all types with descriptions,
+        useful for including in system prompts.
+        """
+        return [
+            {"type": mt.value, "description": mt.description}
+            for mt in cls if mt != cls.AUTO
+        ]
+
+    def __repr__(self):
+        return f"<MemoryType.{self.name}: {self.value}>"
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -2186,7 +2294,9 @@ class EnterpriseLongTermMemory:
     # ------------------------------------------------------------------
     # CRUD
     # ------------------------------------------------------------------
-
+    def get_memory_types() -> list[str]:
+        """Return all valid memory types as a list of strings."""
+        return [mt.value for mt in MemoryType] + ["auto"]
     def get_memory(self, memory_id: str) -> Memory:
         with self._lock:
             memory = self.storage.get_memory(memory_id)

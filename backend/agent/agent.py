@@ -16,14 +16,14 @@ from psycopg.rows import dict_row
 #  CORRECT
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from backend.config.config import config
-from backend.tools.tools import create_tools
+from backend.tools.tools import create_tools,create_tools_memory
 from backend.agent.state import State
-from mcp_servers.servers import get_mcp_server_config
+from ..mcp_servers.servers import get_mcp_server_config
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 import uuid
 
-
+from backend.memory.lang_memory import MemoryType
 def get_database_url():
     database_url = config.DATABASE_URL
 
@@ -78,7 +78,37 @@ Your responsibilities:
     - Important notes
 13. When comparing destinations, provide a clear comparison.
 14. Do not expose internal tool calls unless the user asks for them.
-15. Answer in the same language as the user."""
+15. Answer in the same language as the user.
+
+## Memory Tool Guidelines
+When using memory tools (`memory_save`, `memory_search`, etc.), select the most appropriate memory type for the content to be saved.
+
+Available memory types:
+- semantic: General knowledge and stable facts
+- fact: A verified, checkable fact
+- episodic: A personal experience tied to time and place
+- event: An event that occurred at a specific time
+- preference: A preference, taste, or desire
+- profile: Stable personal information (name, job, background)
+- procedural: Steps, procedures, and know-how
+- skill: An acquired skill or ability
+- rule: A rule, policy, or constraint
+- entity: An independent entity (person, company, tool)
+- relationship: A relation between entities (works_on, uses, knows)
+- task: A task that needs to be done
+- goal: A long-term goal
+- plan: A plan or strategy
+- decision: A decision with its reasoning
+- working: Temporary information currently in use
+- conversation: A summary or excerpt of a conversation
+- summary: A summary of information or a document
+- reflection: A personal insight or thought
+- intuition: A hunch or unverified feeling
+- auto: Type is determined automatically from content
+
+The JSON Schema for the `memory_type` parameter is:
+{"type":"string","enum":["semantic","fact","episodic","event","preference","profile","procedural","skill","rule","entity","relationship","task","goal","plan","decision","working","conversation","summary","reflection","intuition","auto"],"description":"Choose the appropriate memory type for the content to be saved."}
+"""
 
 
 
@@ -103,7 +133,9 @@ async def build_trip_agent() :
     llm = ChatGoogleGenerativeAI(
         model="gemini-3.5-flash-lite"
     )
-    tools = await create_tools()
+    tools_cherch_web = await create_tools()
+    tools_mempry_andRag = await create_tools_memory()
+    tools = [*tools_cherch_web, *tools_mempry_andRag]
     
 
     # 5. Bind tools directly to the LLM
@@ -149,42 +181,42 @@ async def build_trip_agent() :
     return app
 
 
-#  test
-# Exemple avec conservation d'historique simple :
+# #  test
+# # Exemple avec conservation d'historique simple :
 
-def genre_thread_id():
-    thread_id = f"user_{uuid.uuid4().hex}"
-    return thread_id
-async def test_agent(user_input=None,thread_id=None):
+# def genre_thread_id():
+#     thread_id = f"user_{uuid.uuid4().hex}"
+#     return thread_id
+# async def test_agent(user_input=None,thread_id=None):
    
-    if thread_id is None:
-        thread_id = genre_thread_id()
+#     if thread_id is None:
+#         thread_id = genre_thread_id()
 
-    config_user = {
-        "configurable": {
-            "thread_id": thread_id
-        }
-    }  
-    agent = await build_trip_agent()
-    history = []  # Maintain clean message list
+#     config_user = {
+#         "configurable": {
+#             "thread_id": thread_id
+#         }
+#     }  
+#     agent = await build_trip_agent()
+#     history = []  # Maintain clean message list
 
-    while True:
-        user_input = input("\n enter your question: ")
-        if user_input.lower() in ["exit", "stop", "quit"]:
-            break
+#     while True:
+#         user_input = input("\n enter your question: ")
+#         if user_input.lower() in ["exit", "stop", "quit"]:
+#             break
 
-        # Append individual HumanMessage object (not a list or tuple)
-        history.append(HumanMessage(content=user_input))
+#         # Append individual HumanMessage object (not a list or tuple)
+#         history.append(HumanMessage(content=user_input))
 
-        # Invoke agent with state
-        response = await agent.ainvoke({"messages": history},config=config_user)
+#         # Invoke agent with state
+#         response = await agent.ainvoke({"messages": history},config=config_user)
 
-        # Update history with the returned full message list from state
-        history = response["messages"]
+#         # Update history with the returned full message list from state
+#         history = response["messages"]
 
-        # Print the latest response from the AI
-        latest_message = history[-1]
-        print(f"\nAssistant: {latest_message.content[0]['text']}") 
-if __name__== "__main__":
+#         # Print the latest response from the AI
+#         latest_message = history[-1]
+#         print(f"\nAssistant: {latest_message.content[0]['text']}") 
+# if __name__== "__main__":
 
-    asyncio.run(test_agent())
+#     asyncio.run(test_agent())

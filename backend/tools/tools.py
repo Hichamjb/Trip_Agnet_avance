@@ -1,6 +1,6 @@
 import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from mcp_servers.servers import get_mcp_server_config
+from ..mcp_servers.servers import get_mcp_server_config
 
 
 async def create_tools():
@@ -18,9 +18,20 @@ async def info_tools():
             "name": tool.name,
             "description": tool.description
         })
-    # print(tool_info)    
+     
     return tool_info 
-# if __name__=="__main__":
-#     asyncio.run(info_tools())
 
 
+
+
+async def create_tools_memory():
+    client2 = M= MultiServerMCPClient(
+    {
+        "Long_memory": {
+            "transport": "sse",
+            "url": "http://127.0.0.1:8001/sse",
+        }
+    }
+    )
+    tools = await client2.get_tools()
+    return tools
